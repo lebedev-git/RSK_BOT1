@@ -1,34 +1,43 @@
 import json
 import os
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
+from utils.logger import logger
+from utils.error_handler import DatabaseError, UserError, TeamError
 
 class JsonStorage:
-    def __init__(self):
+    def __init__(self) -> None:
         self.data_dir = "data"
         self.users_file = os.path.join(self.data_dir, "users.json")
         self.teams_file = os.path.join(self.data_dir, "teams.json")
         self.attendance_file = os.path.join(self.data_dir, "attendance.json")
         self._init_storage()
 
-    def _init_storage(self):
+    def _init_storage(self) -> None:
         """Инициализация хранилища"""
-        if not os.path.exists(self.data_dir):
-            os.makedirs(self.data_dir)
-        
-        # Создаем файлы если их нет
-        for file_path in [self.users_file, self.teams_file, self.attendance_file]:
-            if not os.path.exists(file_path):
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump({}, f, ensure_ascii=False, indent=4)
+        try:
+            if not os.path.exists(self.data_dir):
+                os.makedirs(self.data_dir)
+                logger.info(f"Создана директория {self.data_dir}")
+            
+            # Создаем файлы если их нет
+            for file_path in [self.users_file, self.teams_file, self.attendance_file]:
+                if not os.path.exists(file_path):
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        json.dump({}, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            raise DatabaseError("Ошибка при инициализации хранилища", {"error": str(e)})
 
-    def _load_json(self, file_path: str) -> dict:
+    def _load_json(self, file_path: str) -> Dict:
         """Загрузка данных из JSON файла"""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(f"Ошибка декодирования JSON в {file_path}: {e}")
             return {}
+        except Exception as e:
+            raise DatabaseError(f"Ошибка при чтении файла {file_path}", {"error": str(e)})
 
     def _save_json(self, data: dict, file_path: str):
         """Сохранение данных в JSON файл"""
@@ -36,9 +45,14 @@ class JsonStorage:
             json.dump(data, ensure_ascii=False, indent=4, fp=f)
 
     # Методы для работы с пользователями
-    async def get_user(self, telegram_id: int) -> Optional[dict]:
-        users = self._load_json(self.users_file)
-        return users.get(str(telegram_id))
+    async def get_user(self, telegram_id: int) -> Optional[Dict]:
+        """Получение информации о пользователе"""
+        try:
+            users = self._load_json(self.users_file)
+            return users.get(str(telegram_id))
+        except Exception as e:
+            logger.error(f"Ошибка при получении пользователя {telegram_id}: {e}")
+            return None
 
     async def create_user(self, telegram_id: int, username: str, is_admin: bool = False) -> dict:
         users = self._load_json(self.users_file)

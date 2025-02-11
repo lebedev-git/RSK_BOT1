@@ -66,7 +66,35 @@ async def show_teams_rating(callback_query: types.CallbackQuery):
     keyboard.add(InlineKeyboardButton("◀️ Назад", callback_data="back_to_menu"))
     await callback_query.message.edit_text(text, reply_markup=keyboard)
 
-# Добавим обработчик для кнопки "Назад"
+def format_user_stats(stats: dict, user: dict) -> str:
+    """Форматирование статистики пользователя"""
+    text = (
+        f"👤 Моя статистика посещений\n"
+        f"{'─' * 30}\n\n"
+        f"📅 Всего отметок: {stats['total_marked']}\n\n"
+        f"✅ Присутствовал: {stats['present']} ({(stats['present']/stats['total_marked']*100):.1f}%)\n"
+        f"❌ Отсутствовал: {stats['absent']} ({(stats['absent']/stats['total_marked']*100):.1f}%)"
+    )
+    
+    if stats['consecutive_absences'] > 1:
+        text += f" ⚠️ {stats['consecutive_absences']} раз подряд"
+    
+    text += (
+        f"\n⚠️ По ув. причине: {stats['excused']} ({(stats['excused']/stats['total_marked']*100):.1f}%)\n\n"
+        f"📈 Общая посещаемость: {stats['attendance_rate']:.1f}%\n"
+    )
+    
+    if stats['attendance_rate'] >= 90:
+        text += "\n🌟 Отличная посещаемость!"
+    elif stats['attendance_rate'] >= 75:
+        text += "\n👍 Хорошая посещаемость"
+    elif stats['attendance_rate'] >= 50:
+        text += "\n⚠️ Средняя посещаемость"
+    else:
+        text += "\n❗️ Низкая посещаемость"
+    
+    return text
+
 async def back_to_menu(callback_query: types.CallbackQuery, state: FSMContext):
     """Возврат в главное меню"""
     user = await db.get_user(callback_query.from_user.id)
@@ -74,7 +102,7 @@ async def back_to_menu(callback_query: types.CallbackQuery, state: FSMContext):
         return await callback_query.answer("❌ Ошибка: пользователь не найден")
     
     stats = await db.get_user_attendance_stats(user['telegram_id'])
-    text = format_user_stats(stats, user)  # Вынесем форматирование в отдельную функцию
+    text = format_user_stats(stats, user)
     await callback_query.message.edit_text(text, reply_markup=get_user_keyboard())
 
 def register_handlers(dp: Dispatcher):

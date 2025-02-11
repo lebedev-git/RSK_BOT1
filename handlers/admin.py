@@ -18,6 +18,7 @@ from datetime import datetime
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import pandas as pd
 from io import BytesIO
+from utils.decorators import log_errors
 
 class TeamCreation(StatesGroup):
     waiting_for_name = State()
@@ -44,9 +45,12 @@ class TeamEditing(StatesGroup):
     adding_member = State()
     confirming_delete = State()
 
+@log_errors
 async def admin_panel(message: types.Message, state: FSMContext):
+    """Панель администратора"""
     user = await db.get_user(message.from_user.id)
     if not user or not user["is_admin"]:
+        logger.warning(f"Попытка доступа к админ-панели: {message.from_user.id}")
         return await message.answer("❌ У вас нет прав администратора.")
     
     await state.finish()
@@ -493,34 +497,69 @@ async def show_team_points_actions(callback_query: types.CallbackQuery, state: F
         print(f"Error in show_team_points_actions: {e}")
         await callback_query.answer("Произошла ошибка", show_alert=True)
 
+@log_errors
 async def handle_points_action(callback_query: types.CallbackQuery, state: FSMContext):
+    """Обработка действий с баллами команды"""
     try:
-        if callback_query.data.startswith("custom_points_"):
-            team_id = callback_query.data.split('_')[2]
+        action, team_id = callback_query.data.split('_', 2)[1:]
+        team = await db.get_team(team_id)
+        
+        if not team:
+            await callback_query.answer("Команда не найдена!")
+            return
+        
+        if action == "points":
+            # Показываем меню управления баллами
+            await TeamManagement.managing_points.set()
             await state.update_data(team_id=team_id)
-            await callback_query.message.edit_text(
-                "Введите количество баллов (положительное число для начисления, отрицательное для снятия):"
+            
+            text = f"🏆 Управление баллами команды {team['name']}\n"
+            text += f"Текущий счет: {team['points']} баллов\n\n"
+            text += "Выберите действие:"
+            
+            keyboard = InlineKeyboardMarkup(row_width=2)
+            keyboard.add(
+                InlineKeyboardButton("+1", callback_data=f"add_points_{team_id}_1"),
+                InlineKeyboardButton("-1", callback_data=f"remove_points_{team_id}_1"),
+                InlineKeyboardButton("+5", callback_data=f"add_points_{team_id}_5"),
+                InlineKeyboardButton("-5", callback_data=f"remove_points_{team_id}_5"),
+                InlineKeyboardButton("Другое количество", callback_data=f"custom_points_{team_id}")
             )
-            await TeamManagement.entering_points.set()
-        else:
-            action, team_id, points = callback_query.data.split('_')
-            points = int(points)
+            keyboard.add(InlineKeyboardButton("◀️ Назад", callback_data="back_to_team_management"))
+            
+            await callback_query.message.edit_text(text, reply_markup=keyboard)
+            
+        elif action in ["add", "remove"]:
+            points = int(team_id.split('_')[1])
             if action == "remove":
                 points = -points
             
-            await state.update_data(
-                points_to_add=points,
-                team_id=team_id
-            )
+            await TeamManagement.entering_reason.set()
+            await state.update_data(team_id=team_id.split('_')[0], points=points)
             
             await callback_query.message.edit_text(
-                f"Укажите причину {'начисления' if points > 0 else 'снятия'} {abs(points)} баллов:"
+                "Введите причину изменения баллов:",
+                reply_markup=InlineKeyboardMarkup().add(
+                    InlineKeyboardButton("Отмена", callback_data="back_to_team_management")
+                )
             )
-            await TeamManagement.entering_reason.set()
+            
+        elif action == "custom":
+            await TeamManagement.entering_points.set()
+            await state.update_data(team_id=team_id)
+            
+            await callback_query.message.edit_text(
+                "Введите количество баллов (положительное или отрицательное число):",
+                reply_markup=InlineKeyboardMarkup().add(
+                    InlineKeyboardButton("Отмена", callback_data="back_to_team_management")
+                )
+            )
+        
         await callback_query.answer()
+        
     except Exception as e:
-        print(f"Error in handle_points_action: {e}")
-        await callback_query.answer("Произошла ошибка", show_alert=True)
+        logger.error(f"Ошибка в handle_points_action: {e}")
+        await callback_query.answer("Произошла ошибка!", show_alert=True)
 
 async def process_custom_points(message: types.Message, state: FSMContext):
     try:
@@ -1012,6 +1051,16 @@ async def publish_attendance_rating(callback_query: types.CallbackQuery):
     await callback_query.bot.send_message(config.GROUP_CHAT_ID, text)
     await callback_query.answer("Рейтинг посещений опубликован!")
 
+@log_errors
+async def back_to_team_management(callback_query: types.CallbackQuery, state: FSMContext):
+    """Возврат в меню управления командами"""
+    await state.finish()
+    text = (
+        "🏆 УПРАВЛЕНИЕ КОМАНДАМИ\n\n"
+        "Выберите действие из меню ниже:"
+    )
+    await callback_query.message.edit_text(text, reply_markup=get_team_management_keyboard())
+
 def register_handlers(dp: Dispatcher):
     dp.register_message_handler(admin_panel, commands=["admin"], state="*")
     dp.register_callback_query_handler(manage_admins, text="manage_admins")
@@ -1117,4 +1166,9 @@ def register_handlers(dp: Dispatcher):
         lambda c: c.data.startswith("user_stats_"),
         state="*"
     )
-    dp.register_callback_query_handler(publish_attendance_rating, text="publish_attendance_rating") 
+    dp.register_callback_query_handler(publish_attendance_rating, text="publish_attendance_rating")
+    dp.register_callback_query_handler(
+        back_to_team_management,
+        lambda c: c.data == "back_to_team_management",
+        state="*"
+    ) 
