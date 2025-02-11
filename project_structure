@@ -1,0 +1,22 @@
+attendance_bot/
+├── .env
+├── requirements.txt
+├── .gitignore
+├── main.py
+├── config.py
+├── database/
+│   ├── __init__.py
+│   └── models.py
+├── handlers/
+│   ├── __init__.py
+│   ├── admin.py
+│   ├── common.py
+│   └── rating.py
+└── utils/
+    ├── __init__.py
+    ├── keyboards.py
+    └── states.py
+├── data/
+│   ├── users.json
+│   ├── teams.json
+│   └── attendance.json 

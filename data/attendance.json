@@ -1,0 +1,34 @@
+{
+    "2025-02-11": {
+        "111111111": {
+            "status": "absent",
+            "marked_by": 804636463,
+            "timestamp": "2025-02-11T14:27:19.204354",
+            "consecutive_absences": 1
+        },
+        "222222222": {
+            "status": "absent",
+            "marked_by": 804636463,
+            "timestamp": "2025-02-11T14:27:19.278780",
+            "consecutive_absences": 1
+        },
+        "804636463": {
+            "status": "absent",
+            "marked_by": 804636463,
+            "timestamp": "2025-02-11T14:27:19.188910",
+            "consecutive_absences": 1
+        },
+        "333333333": {
+            "status": "absent",
+            "marked_by": 804636463,
+            "timestamp": "2025-02-11T14:27:19.222832",
+            "consecutive_absences": 1
+        },
+        "444444444": {
+            "status": "absent",
+            "marked_by": 804636463,
+            "timestamp": "2025-02-11T14:27:19.254143",
+            "consecutive_absences": 1
+        }
+    }
+}
