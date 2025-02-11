@@ -1,11 +1,23 @@
 # Виртуальное окружение
 venv/
+env/
+
+# Кэш Python
 __pycache__/
+*.py[cod]
 *.pyc
 
-# Конфиденциальные данные
+# Логи
+logs/
+*.log
+
+# Конфиги
 .env
 
 # База данных и кэш
 *.db
-*.sqlite3 
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/ 

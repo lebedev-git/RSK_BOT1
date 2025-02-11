@@ -19,6 +19,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import pandas as pd
 from io import BytesIO
 from utils.decorators import log_errors
+import asyncio
+from utils.logger import logger
 
 class TeamCreation(StatesGroup):
     waiting_for_name = State()
@@ -942,34 +944,44 @@ async def publish_rating(callback_query: types.CallbackQuery):
     await callback_query.bot.send_message(config.GROUP_CHAT_ID, text)
     await callback_query.answer("Рейтинг опубликован в общем чате!")
 
+@log_errors
 async def show_members_statistics(callback_query: types.CallbackQuery):
+    """Показать статистику участников"""
     try:
         users = await db.get_all_users()
+        stats_list = []
+        
+        for user in users:
+            stats = await db.get_user_attendance_stats(user['telegram_id'])
+            stats_list.append((user, stats))
+        
+        # Сортируем по посещаемости
+        stats_list.sort(key=lambda x: x[1]['attendance_rate'], reverse=True)
+        
+        text = "📊 СТАТИСТИКА УЧАСТНИКОВ\n\n"
+        
+        for user, stats in stats_list:
+            text += f"👤 {user['username']}\n"
+            text += f"├ Посещаемость: {stats['attendance_rate']:.1f}%\n"
+            text += f"├ Присутствий: {stats['present']}\n"
+            text += f"└ Пропусков: {stats['absent']}"
+            
+            if stats['consecutive_absences'] > 1:
+                text += f" ⚠️ {stats['consecutive_absences']} раз подряд"
+            
+            text += "\n\n"
         
         keyboard = InlineKeyboardMarkup(row_width=1)
-        for user in users:
-            # Добавляем callback_data с правильным форматом
-            keyboard.add(InlineKeyboardButton(
-                f"{'👑' if user['is_admin'] else '👤'} {user['username']}", 
-                callback_data=f"user_stats_{user['telegram_id']}"
-            ))
-        
         keyboard.add(
-            InlineKeyboardButton("📊 Опубликовать рейтинг посещений", callback_data="publish_attendance_rating"),
+            InlineKeyboardButton("📊 Опубликовать рейтинг", callback_data="publish_attendance_rating"),
             InlineKeyboardButton("◀️ Назад", callback_data="back_to_admin")
         )
         
-        await callback_query.message.edit_text(
-            "📈 СТАТИСТИКА УЧАСТНИКОВ\n"
-            f"{'─' * 30}\n\n"
-            "👑 - администратор\n"
-            "👤 - участник\n\n"
-            "Выберите пользователя для просмотра статистики:",
-            reply_markup=keyboard
-        )
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        
     except Exception as e:
-        print(f"Error in show_members_statistics: {e}")
-        await callback_query.answer("Произошла ошибка при загрузке списка", show_alert=True)
+        logger.error(f"Ошибка в show_members_statistics: {e}")
+        await callback_query.answer("Произошла ошибка при загрузке статистики", show_alert=True)
 
 async def show_user_stats(callback_query: types.CallbackQuery):
     try:
