@@ -80,36 +80,45 @@ class JsonStorage:
 
     async def mark_attendance(self, user_id: int, status: str, marked_by: int):
         attendance = self._load_json(self.attendance_file)
-        current_date = datetime.now().date().isoformat()
+        current_datetime = datetime.now().isoformat()  # Используем полную дату со временем
         
-        if current_date not in attendance:
-            attendance[current_date] = {}
+        if current_datetime not in attendance:
+            attendance[current_datetime] = {}
         
         # Получаем все даты и сортируем их от новых к старым
         dates = sorted(attendance.keys(), reverse=True)
         consecutive_absences = 0
         
-        print(f"Marking attendance for user {user_id} with status {status}")
+        print(f"\nProcessing attendance for user {user_id}")
+        print(f"Current status: {status}")
+        print(f"Current datetime: {current_datetime}")
         
         if status == "absent":
-            # Начинаем с 1, так как текущая отметка - пропуск
-            consecutive_absences = 1
-            
-            # Проверяем предыдущие даты
+            # Проверяем предыдущие отметки
             for prev_date in dates:
-                if prev_date == current_date:  # Пропускаем текущую дату
+                if prev_date == current_datetime:  # Пропускаем текущую отметку
                     continue
                     
                 if str(user_id) in attendance[prev_date]:
                     prev_status = attendance[prev_date][str(user_id)]["status"]
                     prev_consecutive = attendance[prev_date][str(user_id)].get("consecutive_absences", 0)
                     
-                    print(f"Found previous record: date={prev_date}, status={prev_status}, consecutive={prev_consecutive}")
+                    print(f"Found previous record on {prev_date}:")
+                    print(f"- Status: {prev_status}")
+                    print(f"- Consecutive absences: {prev_consecutive}")
                     
                     if prev_status == "absent":
                         consecutive_absences = prev_consecutive + 1
-                        print(f"Increasing consecutive to: {consecutive_absences}")
-                    break  # Всегда берем только предыдущую отметку
+                        print(f"Previous was absent, increasing to: {consecutive_absences}")
+                    else:
+                        consecutive_absences = 1
+                        print(f"Previous was not absent, setting to: {consecutive_absences}")
+                    break
+            
+            # Если не нашли предыдущих отметок
+            if consecutive_absences == 0:
+                consecutive_absences = 1
+                print("No previous records found, setting to: 1")
         
         print(f"Final consecutive absences: {consecutive_absences}")
         
@@ -117,10 +126,10 @@ class JsonStorage:
         if hasattr(self, '_attendance_cache'):
             delattr(self, '_attendance_cache')
         
-        attendance[current_date][str(user_id)] = {
+        attendance[current_datetime][str(user_id)] = {
             "status": status,
             "marked_by": marked_by,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": current_datetime,
             "consecutive_absences": consecutive_absences
         }
         

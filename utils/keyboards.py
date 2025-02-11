@@ -144,4 +144,12 @@ def get_teams_points_keyboard(teams: list) -> InlineKeyboardMarkup:
             )
         )
     keyboard.add(InlineKeyboardButton("◀️ Назад", callback_data="back_to_team_management"))
+    return keyboard
+
+def get_user_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для пользователей"""
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        InlineKeyboardButton("📊 Рейтинг команд", callback_data="show_teams_rating")
+    )
     return keyboard 

@@ -91,7 +91,6 @@ async def handle_attendance_mark(callback_query: types.CallbackQuery, state: FSM
             marked[user_id] = status
             await state.update_data(marked=marked)
             
-            # Используем только edit_reply_markup вместо edit_text
             await callback_query.message.edit_reply_markup(
                 reply_markup=get_attendance_panel_keyboard(users, marked)
             )
@@ -99,20 +98,20 @@ async def handle_attendance_mark(callback_query: types.CallbackQuery, state: FSM
             return
         
         elif callback_query.data == "finish_attendance":
-            # Проверяем, все ли отмечены
             if len(marked) < len(users):
                 await callback_query.answer("Пожалуйста, отметьте всех участников!")
                 return
             
             # Получаем текущую посещаемость
             attendance = await db.get_attendance()
-            current_date = datetime.now().date().isoformat()
+            current_datetime = datetime.now().isoformat()
             
             # Группируем пользователей по статусам
             present_users = []
             absent_users = []
             excused_users = []
             
+            # Сначала отмечаем посещаемость
             for user_id, status in marked.items():
                 # Сохраняем в базу
                 await db.mark_attendance(
@@ -127,11 +126,11 @@ async def handle_attendance_mark(callback_query: types.CallbackQuery, state: FSM
                     if status == "present":
                         present_users.append(user["username"])
                     elif status == "absent":
-                        absent_users.append(user)  # Сохраняем весь объект пользователя
+                        absent_users.append(user)
                     elif status == "excused":
                         excused_users.append(user["username"])
             
-            # Получаем все команды и начисляем баллы
+            # Затем начисляем баллы командам
             teams = await db.get_all_teams()
             for team in teams:
                 team_attendance = {"present": 0, "absent": 0, "excused": 0}
@@ -152,6 +151,9 @@ async def handle_attendance_mark(callback_query: types.CallbackQuery, state: FSM
                         admin_id=callback_query.from_user.id
                     )
             
+            # Получаем обновленные данные после всех отметок
+            attendance = await db.get_attendance()
+            
             # Формируем текст с результатами
             current_time = datetime.now().strftime("%d.%m.%Y %H:%M")
             result_text = (
@@ -163,11 +165,30 @@ async def handle_attendance_mark(callback_query: types.CallbackQuery, state: FSM
                 f"{''.join(f'└ {user}\n' for user in present_users) if present_users else '└ (нет)\n'}\n"
                 
                 "❌ ОТСУТСТВОВАЛИ:\n"
-                f"{''.join(f'└ {user['username']}{' ⚠️ ' + str(attendance[current_date][str(user['telegram_id'])]['consecutive_absences']) + ' раз подряд' if attendance[current_date][str(user['telegram_id'])]['consecutive_absences'] > 1 else ''}\n' for user in absent_users) if absent_users else '└ (нет)\n'}\n"
-                
-                "⚠️ ПО УВАЖИТЕЛЬНОЙ ПРИЧИНЕ:\n"
-                f"{''.join(f'└ {user}\n' for user in excused_users) if excused_users else '└ (нет)\n'}"
             )
+            
+            # Добавляем отсутствующих с учетом пропусков подряд
+            if absent_users:
+                for user in absent_users:
+                    # Находим последнюю запись для пользователя
+                    user_records = []
+                    for date in attendance:
+                        if str(user['telegram_id']) in attendance[date]:
+                            user_records.append((date, attendance[date][str(user['telegram_id'])]))
+                    
+                    if user_records:
+                        # Берем самую последнюю запись
+                        latest_record = max(user_records, key=lambda x: x[0])
+                        consecutive = latest_record[1].get('consecutive_absences', 0)
+                        result_text += f"└ {user['username']}"
+                        if consecutive > 1:
+                            result_text += f" ⚠️ {consecutive} раз подряд"
+                        result_text += "\n"
+            else:
+                result_text += "└ (нет)\n"
+            
+            result_text += "\n⚠️ ПО УВАЖИТЕЛЬНОЙ ПРИЧИНЕ:\n"
+            result_text += f"{''.join(f'└ {user}\n' for user in excused_users) if excused_users else '└ (нет)\n'}"
             
             # Отправляем результаты в групповой чат
             await callback_query.bot.send_message(config.GROUP_CHAT_ID, result_text)
